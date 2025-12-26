@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import type { WardrobeItem } from '../types';
 import { UploadCloudIcon, CheckCircleIcon } from './icons';
 import Spinner from './Spinner';
+import { validateImageFile, compressImage, getFriendlyErrorMessage } from '../lib/utils';
 
 interface WardrobePanelProps {
   onGarmentSelect: (garmentFile: File, garmentInfo: WardrobeItem) => void;
@@ -53,19 +54,36 @@ const WardrobePanel: React.FC<WardrobePanelProps> = ({ onGarmentSelect, activeGa
         }
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            if (!file.type.startsWith('image/')) {
-                setError('Invalid image format. Try JPG or PNG.');
+
+            // Validate the file
+            const validation = validateImageFile(file);
+            if (!validation.valid) {
+                setError(validation.error || 'Invalid file');
                 return;
             }
-            const customGarmentInfo: WardrobeItem = {
-                id: `custom-${Date.now()}`,
-                name: file.name,
-                url: URL.createObjectURL(file),
-            };
-            onGarmentSelect(file, customGarmentInfo);
+
+            setError(null);
+            setProcessingId('custom-upload');
+
+            try {
+                // Compress the image for better performance
+                const compressedFile = await compressImage(file, 1024, 0.85);
+
+                const customGarmentInfo: WardrobeItem = {
+                    id: `custom-${Date.now()}`,
+                    name: file.name.replace(/\.[^/.]+$/, ''), // Remove file extension
+                    url: URL.createObjectURL(compressedFile),
+                };
+
+                onGarmentSelect(compressedFile, customGarmentInfo);
+            } catch (err) {
+                setError(getFriendlyErrorMessage(err, 'processing your garment'));
+            } finally {
+                setProcessingId(null);
+            }
         }
     };
 

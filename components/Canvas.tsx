@@ -25,14 +25,14 @@ interface CanvasProps {
   canRedo: boolean;
 }
 
-const Canvas: React.FC<CanvasProps> = ({ 
-  displayImageUrl, 
-  onStartOver, 
-  isLoading, 
-  loadingMessage, 
-  onSelectPose, 
-  poseInstructions, 
-  currentPoseIndex, 
+const Canvas: React.FC<CanvasProps> = ({
+  displayImageUrl,
+  onStartOver,
+  isLoading,
+  loadingMessage,
+  onSelectPose,
+  poseInstructions,
+  currentPoseIndex,
   availablePoseKeys,
   onSaveOutfit,
   onLoadOutfit,
@@ -44,6 +44,45 @@ const Canvas: React.FC<CanvasProps> = ({
   const [isPoseMenuOpen, setIsPoseMenuOpen] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
+
+  // Keyboard navigation support
+  React.useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Prevent keyboard shortcuts when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Undo/Redo shortcuts
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && canUndo) {
+        e.preventDefault();
+        onUndo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey)) && canRedo) {
+        e.preventDefault();
+        onRedo();
+      }
+
+      // Pose navigation with arrow keys
+      if (!isLoading && displayImageUrl) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          handlePreviousPose();
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          handleNextPose();
+        }
+      }
+
+      // Save shortcut
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSaveAttempt();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [canUndo, canRedo, isLoading, displayImageUrl, currentPoseIndex]);
   
   const handleSaveAttempt = () => {
     setShowSaveModal(true);
@@ -94,24 +133,29 @@ const Canvas: React.FC<CanvasProps> = ({
       {/* Studio Header Controls */}
       <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between pointer-events-none">
         <div className="flex gap-2 pointer-events-auto">
-          <button 
+          <button
               onClick={onStartOver}
+              aria-label="Reset session"
               className="flex items-center justify-center bg-white/80 border border-gray-200 text-gray-700 font-bold py-2 px-3 rounded-full transition-all hover:bg-white text-[9px] uppercase tracking-widest backdrop-blur-md shadow-sm"
           >
               <RotateCcwIcon className="w-3 h-3 mr-2" />
               Reset
           </button>
           <div className="flex gap-1 bg-white/80 backdrop-blur-md border border-gray-200 rounded-full p-1 shadow-sm">
-            <button 
-              onClick={onUndo} 
+            <button
+              onClick={onUndo}
               disabled={!canUndo || isLoading}
+              aria-label="Undo last action (Ctrl+Z)"
+              title="Undo (Ctrl+Z)"
               className="p-1.5 rounded-full hover:bg-gray-100 disabled:opacity-30 transition-all"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
             </button>
-            <button 
-              onClick={onRedo} 
+            <button
+              onClick={onRedo}
               disabled={!canRedo || isLoading}
+              aria-label="Redo last action (Ctrl+Y)"
+              title="Redo (Ctrl+Y)"
               className="p-1.5 rounded-full hover:bg-gray-100 disabled:opacity-30 transition-all"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
@@ -120,16 +164,19 @@ const Canvas: React.FC<CanvasProps> = ({
         </div>
 
         <div className="flex gap-2 pointer-events-auto">
-          <button 
+          <button
               onClick={handleSaveAttempt}
+              aria-label={showSaveConfirm ? 'Look archived' : 'Archive current look (Ctrl+S)'}
+              title={showSaveConfirm ? 'Saved!' : 'Save (Ctrl+S)'}
               className={`flex items-center justify-center font-bold py-2 px-4 rounded-full transition-all text-[9px] uppercase tracking-widest shadow-sm
                 ${showSaveConfirm ? 'bg-green-600 text-white' : 'bg-gray-900 text-white hover:bg-black'}
               `}
           >
               {showSaveConfirm ? 'Archived' : 'Archive Look'}
           </button>
-          <button 
+          <button
               onClick={onLoadOutfit}
+              aria-label="Restore archived look"
               className="flex items-center justify-center bg-white/80 border border-gray-200 text-gray-700 font-bold py-2 px-4 rounded-full transition-all hover:bg-white text-[9px] uppercase tracking-widest backdrop-blur-md shadow-sm"
           >
               Restore
@@ -143,7 +190,8 @@ const Canvas: React.FC<CanvasProps> = ({
           <img
             key={displayImageUrl}
             src={displayImageUrl}
-            alt="Studio Model"
+            alt="Fashion model wearing current outfit selection"
+            role="img"
             className="max-w-full max-h-full object-contain transition-opacity duration-500 animate-fade-in rounded-lg shadow-2xl"
           />
         ) : (
@@ -203,18 +251,26 @@ const Canvas: React.FC<CanvasProps> = ({
           </AnimatePresence>
           
           <div className="flex items-center justify-center gap-2 bg-gray-900/90 backdrop-blur-md rounded-full px-4 py-2 border border-white/10 shadow-2xl">
-            <button 
+            <button
               onClick={handlePreviousPose}
+              aria-label="Previous pose (Left Arrow)"
+              title="Previous (←)"
               className="p-1.5 rounded-full hover:bg-white/10 disabled:opacity-30"
               disabled={isLoading}
             >
               <ChevronLeftIcon className="w-4 h-4 text-white" />
             </button>
-            <span className="text-[9px] uppercase tracking-[0.3em] font-bold text-white w-32 text-center truncate">
+            <span
+              className="text-[9px] uppercase tracking-[0.3em] font-bold text-white w-32 text-center truncate"
+              role="status"
+              aria-live="polite"
+            >
               {poseInstructions[currentPoseIndex].split(',')[0]}
             </span>
-            <button 
+            <button
               onClick={handleNextPose}
+              aria-label="Next pose (Right Arrow)"
+              title="Next (→)"
               className="p-1.5 rounded-full hover:bg-white/10 disabled:opacity-30"
               disabled={isLoading}
             >

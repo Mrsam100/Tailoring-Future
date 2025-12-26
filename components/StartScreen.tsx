@@ -10,7 +10,7 @@ import { UploadCloudIcon } from './icons';
 import { Compare } from './ui/compare';
 import { generateModelImage } from '../services/geminiService';
 import Spinner from './Spinner';
-import { getFriendlyErrorMessage } from '../lib/utils';
+import { getFriendlyErrorMessage, validateImageFile, compressImage } from '../lib/utils';
 
 interface StartScreenProps {
   onModelFinalized: (modelUrl: string) => void;
@@ -23,28 +23,37 @@ const StartScreen: React.FC<StartScreenProps> = ({ onModelFinalized }) => {
   const [error, setError] = useState<string | null>(null);
 
   const handleFileSelect = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-        setError('Please select a valid image file (JPG, PNG).');
+    // Validate file
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+        setError(validation.error || 'Invalid file');
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        const dataUrl = e.target?.result as string;
-        setUserImageUrl(dataUrl);
-        setIsGenerating(true);
-        setGeneratedModelUrl(null);
-        setError(null);
-        try {
-            const result = await generateModelImage(file);
-            setGeneratedModelUrl(result);
-        } catch (err) {
-            setError(getFriendlyErrorMessage(err, 'creating your studio model'));
-        } finally {
-            setIsGenerating(false);
-        }
-    };
-    reader.readAsDataURL(file);
+    setError(null);
+    setIsGenerating(true);
+    setGeneratedModelUrl(null);
+
+    try {
+        // Compress image for better performance
+        const compressedFile = await compressImage(file, 1200, 0.9);
+
+        // Create preview from compressed file
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            setUserImageUrl(e.target?.result as string);
+        };
+        reader.readAsDataURL(compressedFile);
+
+        // Generate model image
+        const result = await generateModelImage(compressedFile);
+        setGeneratedModelUrl(result);
+    } catch (err) {
+        setError(getFriendlyErrorMessage(err, 'creating your studio model'));
+        setUserImageUrl(null);
+    } finally {
+        setIsGenerating(false);
+    }
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
